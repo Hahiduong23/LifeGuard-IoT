@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lịch Sử Cảnh Báo Hệ Thống</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --bg-color: #0f172a; --card-bg: #1e293b; --text-main: #f8fafc; --text-sub: #94a3b8; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); }
+        
+        .navbar { background: #1e293b; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+        .nav-brand { font-size: 18px; font-weight: bold; color: #38bdf8; text-transform: uppercase; }
+        .nav-links a { color: var(--text-sub); text-decoration: none; margin-right: 20px; font-weight: 600; font-size: 15px; }
+        .nav-links a.active, .nav-links a:hover { color: #38bdf8; }
+        .logout-btn { padding: 8px 15px; background: #334155; border: 1px solid #475569; border-radius: 6px; color: #ef4444; font-weight: 600; cursor: pointer; }
+
+        .content-body { padding: 30px; max-width: 1200px; margin: 0 auto; }
+        .page-title { font-size: 20px; font-weight: bold; color: #38bdf8; margin-bottom: 20px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+        
+        .table-container { background: var(--card-bg); border-radius: 12px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        table { width: 100%; border-collapse: collapse; text-align: left; font-size: 15px; }
+        th { background: #334155; color: #38bdf8; padding: 15px; font-weight: 600; text-transform: uppercase; font-size: 13px; }
+        td { padding: 15px; border-bottom: 1px solid #334155; color: #e2e8f0; }
+        
+        .badge { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; text-transform: uppercase; }
+        .badge-warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; }
+        .badge-danger { background: rgba(239, 110, 110, 0.2); color: #ef4444; border: 1px solid #ef4444; }
+        .clear-btn { padding: 8px 15px; background: #7f1d1d; border: 1px solid #b91c1c; color: white; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <div class="navbar">
+        <div class="nav-brand"><i class="fa-solid fa-laptop-medical"></i> HỆ THỐNG Y TẾ AI REAL-TIME</div>
+        <div class="nav-links">
+            <a href="dashboard.html"><i class="fa-solid fa-chart-line"></i> Giám Sát</a>
+            <a href="history.html" class="active"><i class="fa-solid fa-clock-history"></i> Lịch Sử Sự Cố</a>
+        </div>
+        <button class="logout-btn" id="btnLogout">Đăng Xuất</button>
+    </div>
+
+    <div class="content-body">
+        <div class="page-title">
+            <span><i class="fa-solid fa-receipt"></i> Nhật Ký Cảnh Báo Hệ Thống</span>
+            <button class="clear-btn" id="btnClear">Xóa lịch sử</button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Thời Gian Sự Cố</th>
+                        <th>Loại Cảnh Báo</th>
+                        <th>Chỉ số SpO2</th>
+                        <th>Nhịp Tim</th>
+                        <th>Tư Thế Ngủ</th>
+                        <th>Trạng Thái Thở (AI)</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAMuEApllbG1GIjUyKDdS2iA5aBgDXKFX0",
+            authDomain: "he-thong-giam-sat-y-te.firebaseapp.com",
+            databaseURL: "https://he-thong-giam-sat-y-te-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "he-thong-giam-sat-y-te",
+            storageBucket: "he-thong-giam-sat-y-te.firebasestorage.app",
+            messagingSenderId: "364046979167",
+            appId: "1:364046979167:web:30dc775a48fb4e51030bea"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const auth = firebase.auth();
+
+        auth.onAuthStateChanged(user => {
+            if (!user) { window.location.href = "login.html"; }
+        });
+
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            auth.signOut().then(() => { window.location.href = "login.html"; });
+        });
+
+        const tableBody = document.getElementById('historyTableBody');
+        
+        // Đọc nhánh AlertHistory và chèn dòng lên đầu bảng
+        database.ref('/AlertHistory').on('child_added', (snapshot) => {
+            const log = snapshot.val();
+            if (log) {
+                const row = document.createElement('tr');
+                let badgeClass = "badge-warning";
+                if(log.LoaiCanhBao.includes("Ngưng thở") || log.LoaiCanhBao.includes("Ngã")) {
+                    badgeClass = "badge-danger";
+                }
+
+                let textThoAI = "Bình thường";
+                if(log.TrangThaiTho_AI === 1) textThoAI = "Thở gấp (Warning)";
+                if(log.TrangThaiTho_AI === 2) textThoAI = "Ngưng thở (Apnea)";
+
+                row.innerHTML = `
+                    <td style="color:#38bdf8; font-weight:600;">${log.Time}</td>
+                    <td><span class="badge ${badgeClass}">${log.LoaiCanhBao}</span></td>
+                    <td>${log.SpO2} %</td>
+                    <td>${log.HeartRate} BPM</td>
+                    <td style="color:#c084fc;">${log.TuThe}</td>
+                    <td>${textThoAI}</td>
+                `;
+                tableBody.insertBefore(row, tableBody.firstChild);
+            }
+        });
+
+        document.getElementById('btnClear').addEventListener('click', () => {
+            if(confirm("Xác nhận xóa sạch lịch sử nhật ký sự cố?")) {
+                database.ref('/AlertHistory').remove().then(() => {
+                    tableBody.innerHTML = "";
+                    alert("Đã xóa!");
+                });
+            }
+        });
+    </script>
+</body>
+</html>
